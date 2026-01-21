@@ -2,9 +2,10 @@
   "name": "streaming_web_backend",
   "version": "1.0.0",
   "description": "a backend project to implement learning ",
+  "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev":"nodemon src index.js"
   },
   "keywords": [
     "javascript",
@@ -12,5 +13,8 @@
     "web"
   ],
   "author": "Anshika",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
 }

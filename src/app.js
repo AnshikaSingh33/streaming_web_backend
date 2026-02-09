@@ -15,6 +15,17 @@ app.use(express.urlencoded({extended:true,limit:"16kb"}));
 app.use(express.static("public"));
 app.use(cookieParser());
 
+
+//import routes
+import userRouter from './routes/user.routes.js';
+
+
+//route declaration
+//WORKING: dekho jo bhi req aaegi /api/vi/users wo usko userRouter k pas bhej dega
+
+//in the final the url will look like -->http://localhost:8000/api/vi/users/register      or.      http://localhost:8000/api/vi/users/login
+app.use("/api/vi/users",userRouter);
+
 export {app};
 
 

@@ -24,7 +24,7 @@ import userRouter from './routes/user.routes.js';
 //WORKING: dekho jo bhi req aaegi /api/vi/users wo usko userRouter k pas bhej dega
 
 //in the final the url will look like -->http://localhost:8000/api/vi/users/register      or.      http://localhost:8000/api/vi/users/login
-app.use("/api/vi/users",userRouter);
+app.use("/api/v1/users",userRouter);
 
 export {app};
 

@@ -24,7 +24,8 @@ import fs from 'fs';
                 
                  });
            //file uploaded successfully
-           console.log("file uploaded on cloudinary",response.url);
+          // console.log("file uploaded on cloudinary",response.url);
+          fs.unlinkSync(localFilePath);//means if file has been uploaded then it will be deleted automatically
            return response;
         }
 

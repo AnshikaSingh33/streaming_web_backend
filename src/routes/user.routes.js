@@ -1,11 +1,12 @@
 import { Router } from "express";
-import { registerUser } from "../controllers/user.controllers.js";
+import { loginUser, registerUser , logOut } from "../controllers/user.controllers.js";
 import { upload } from "../middlewares/multer.middleware.js";
+import { verifyJWT } from "../middlewares/auth.middleware.js";
 const router = Router();
 
 router.route("/register").post(
   upload.fields//this feilds function of upload can accept any number of unrelated inputs
-  ([//here we are using  the middleware multer to ge the input as a file (image , avatar) as we cant directly accept files from body or json
+  ([//here we are using  the middleware multer to ge the input as a file (image , avatar) as we cant directly accept files from body or json 
     {
       name: "avatar",
       maxCount: 1,
@@ -17,6 +18,12 @@ router.route("/register").post(
   ]),
   registerUser
 );
+
+
+router.route("/login").post(loginUser); 
+
+//secure routes
+router.route("/logOut").post(verifyJWT,  logOut);
 
 //exporting the function in default allows us to name however we want it to
 export default router;

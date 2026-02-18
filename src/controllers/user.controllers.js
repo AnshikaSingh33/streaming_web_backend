@@ -3,13 +3,13 @@ import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js ";
 import { ApiResponse } from "../utils/ApiResponse.js";
-
+import { JsonWebTokenError } from "jsonwebtoken";
 //combine access of refresh and access tokens
 const generateAccessAndRefreshToken = async(userId)=>{
   try{
       const user= await User.findById(userId);
-      const accessToken=user.generateAccessToken();
-      const refreshToken=user.generateRefreshToken();
+      const accessToken = await user.generateAccessTokens();
+      const refreshToken = await user.generateRefreshTokens();
       user.refreshToken=refreshToken; 
       await user.save({ validateBeforeSave:false })
 
@@ -86,8 +86,8 @@ const registerUser = asyncHandler(async (req, res) => {
 });
 
 //login start, L1
-const loginUser = asyncHandler(async (req,res)=>{
-   
+
+const loginUser = asyncHandler(async (req, res) => {
  const {email,username,password}= req.body;
   if(!(username||password))
     throw new ApiError(400,"Username or email is required");
@@ -100,7 +100,7 @@ const loginUser = asyncHandler(async (req,res)=>{
     if(!user)
       throw new ApiError(404,"User does not exist");
 //l4
-    const isPasswordValid = user.isPasswordCorrect(password)
+    const isPasswordValid = await user.isPasswordCorrect(password)
     if(!isPasswordValid)
       throw new ApiError(401,"Password incorrect");
 
@@ -146,7 +146,51 @@ const logOut=asyncHandler(async(req,res)=>{
  
 })
 
-export { registerUser , loginUser , logOut};
+
+//controller for access point of access of Refresh token 
+//p1
+const refreshAccessToken= asyncHandler( async(req,res)=>
+  {
+   //p2
+ const incomingRefreshToken= req.cookies.refreshToken||req.body.refreshToken;
+  if(!incomingRefreshToken)
+ {
+  throw new ApiError(401, "Unauthorised Request");
+ }
+
+     try {
+     //p2
+       const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET)
+       //p3
+     const user= await User.findById(decodedToken?._id) 
+     if(!user)
+     {
+       throw new ApiError(401,"Invalid RefreshToken"); 
+     }
+ //p4
+     if(incomingRefreshToken!==user.refreshToken)
+     {
+       throw new ApiError(401,"Refresh Token expired or used");
+     }
+ 
+     const options={
+       httpOnly:true,
+       secure:true
+     }
+ 
+     const  {accessToken, newRefreshToken} = await generateAccessAndRefreshToken(user._id);
+ 
+     return res
+     .status(200)
+     .cookies("accessToken",accessToken,options)
+     .cookies("refreshToken",newRefreshToken,options)
+     .json(new ApiResponse(200,{accessToken,refreshToken:newRefreshToken},"Access Token refreshed succefully")); 
+ 
+     } catch (error) {
+        throw new ApiError(401,"Something wrong with decoding"); 
+     }
+})
+export { registerUser , loginUser , logOut,refreshAccessToken};
 
 
 
@@ -216,4 +260,14 @@ export { registerUser , loginUser , logOut};
 //======================(L5)======================/
 //this option lets someone edit the cookies on the server side only
 
-  
+//======================(p1)======================/
+//p1
+    //the incoming token can come from cookies saved in the backend or the body
+//p2
+      //the refreshtoken that we have is encrypted due to safety reasons and is not same as the one we have in database
+      //so we use verify function along with the secret key to get the decoded token
+//p3
+       //then we search the databse for the user info by the helf of the decodedtoken as it has the id 
+//p4
+ //then we match the decoded refresh token with the refreshtoken in the database, if is exists then generate the access and refresh tokens based on the id of the user 
+ //then send the responses 

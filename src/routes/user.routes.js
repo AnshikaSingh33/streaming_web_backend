@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { loginUser, registerUser , logOut } from "../controllers/user.controllers.js";
+import { loginUser, registerUser , logOut, refreshAccessToken } from "../controllers/user.controllers.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 const router = Router();
@@ -25,5 +25,7 @@ router.route("/login").post(loginUser);
 //secure routes
 router.route("/logOut").post(verifyJWT,  logOut);
 
+router.route("/refreshAccessToken").post(refreshAccessToken);
+d
 //exporting the function in default allows us to name however we want it to
 export default router;

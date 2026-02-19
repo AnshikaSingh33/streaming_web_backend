@@ -26,6 +26,6 @@ router.route("/login").post(loginUser);
 router.route("/logOut").post(verifyJWT,  logOut);
 
 router.route("/refreshAccessToken").post(refreshAccessToken);
-d
+
 //exporting the function in default allows us to name however we want it to
 export default router;

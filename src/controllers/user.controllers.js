@@ -260,7 +260,11 @@ export { registerUser , loginUser , logOut,refreshAccessToken};
 //======================(L5)======================/
 //this option lets someone edit the cookies on the server side only
 
-//======================(p1)======================/
+
+//======================(Refresh and Access Token)======================/
+
+//  INTRO = we are doing this so that we can create an endpoint where the user can
+//    generate a new refresh token when the access token has expired without needing a     new login 
 //p1
     //the incoming token can come from cookies saved in the backend or the body
 //p2
@@ -269,5 +273,5 @@ export { registerUser , loginUser , logOut,refreshAccessToken};
 //p3
        //then we search the databse for the user info by the helf of the decodedtoken as it has the id 
 //p4
- //then we match the decoded refresh token with the refreshtoken in the database, if is exists then generate the access and refresh tokens based on the id of the user 
- //then send the responses 
+      //then we match the decoded refresh token with the refreshtoken in the database, if is exists then generate the access and refresh tokens based on the id of the user 
+      //then send the responses 

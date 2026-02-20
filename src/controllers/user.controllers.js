@@ -190,7 +190,138 @@ const refreshAccessToken= asyncHandler( async(req,res)=>
         throw new ApiError(401,"Something wrong with decoding"); 
      }
 })
-export { registerUser , loginUser , logOut,refreshAccessToken};
+
+
+//Changing password to new password
+const changeCurrentPassword = asyncHandler(async()=>{
+
+  //p1
+      const {oldPassword, newPassword} = req.body
+
+      const user= await User.findById(user?._id);
+
+  //p2
+     const passwordCheck =await user.isPasswordCorrect(oldPassword);
+     if(!passwordCheck)
+     {
+         throw new ApiError(401,"Invalid old Password"); 
+     }
+
+  //p3 
+    else
+     {
+      user.password=newPassword;
+      user.save({validateBeforeSave:false })
+
+      return res.status(200).json(new ApiError(200,{},"Password saved successfully"))
+     }
+
+})
+
+//get current user
+const getCurrentUser= asyncHandler(async(req,res)=>{
+//p1
+  return res.status(200).json(new ApiResponse(200, req.user, "User sent successfully" ));
+})
+
+
+//Update (text based) Account details
+const updateAccountDetails= asyncHandler(async(req,res)=>{ 
+
+  //p1
+  const {email,fullname} = req.body;
+
+//p2 
+  if(!email || !fullname)
+  {
+    throw new ApiError(401, "Email and fullname are required");
+  }
+  
+  //p3 
+   const user=User.findByIdAndUpdate(req.user?._id,
+    {
+      //p4
+      //set is the mongodb operator that is used to directly change the old value to new value , agar isme bas new value bhi likh de to chalega, key value pair ki jarurat nhi h 
+
+        $set:{
+          fullname:fullname,
+          email:email
+        }
+    }
+    //p5
+   
+    ,{
+      new:true
+    }
+   ).select("-password");
+     return res.status(200).json(new ApiResponse(200,"User DetailsUpdated Successfully"));
+})
+
+
+//update user avatar
+const updateUserAvatar= asyncHandler(async(req,res)=>{
+  //s1
+    const avatarLocalPath=req.file?.path;
+//s2
+     if(!avatarLocalPath)
+     {
+      throw new ApiError(401,"Avatar local file path is missing");
+     }
+//s3
+    const avatar = await  uploadOnCloudinary(avatarLocalPath);
+//s4
+    if(!avatar.url)
+    {
+      throw new ApiError(401,"Error while uploading the Avatar");
+    }
+//s5 
+    const user = await User.findByIdAndUpdate(req.user?._id,{
+        $set:{
+            avatar : avatar.url
+        }
+    },{new:true}).select("-password");
+
+    return res.status(200).json(new ApiResponse(200,user,"Avatar updated successfully"));
+})
+
+//update cover image same is we did for avatar
+const updateUserCoverImage=asyncHandler(async(req,res)=>{
+   const coverimageLocalPath=req.file?.path;
+   if(!coverimageLocalPath)
+   {
+    throw new ApiError(401, "coverImage local path is not found");
+   }
+   
+   const coverimage=await uploadOnCloudinary(coverimageLocalPath);
+
+   if(!coverimage.url)
+   {
+    throw new ApiError(401,"Faild to get url after uploading on cloudinary");
+   }
+
+   const user = User.findByIdAndUpdate(req.user._id,{
+    $set:{
+      coverimage:coverimage.url
+    }
+   },
+   {new:true})
+   .select("-passwprd");
+
+   return res.status(200).json(new ApiResponse(200,user,"CoverImage updated succefully"));
+})
+
+
+
+export { registerUser ,
+        loginUser ,
+        logOut , 
+        refreshAccessToken, 
+        updateAccountDetails, 
+        updateUserAvatar, 
+        getCurrentUser,
+        changeCurrentPassword,
+        updateUserCoverImage
+    };
 
 
 
@@ -275,3 +406,53 @@ export { registerUser , loginUser , logOut,refreshAccessToken};
 //p4
       //then we match the decoded refresh token with the refreshtoken in the database, if is exists then generate the access and refresh tokens based on the id of the user 
       //then send the responses 
+
+
+
+//===========Changing password to new password=================//
+
+//p1
+  //we need new as well as the old password to change the pass
+  //we can also implement tha functionality of new password and confirm password by if(newPassword===confirmPassword)
+
+//p2
+  //ispassword function checks if the old password entered is correct or rong
+//p3 
+  // since there is only one feild we can directly change the value to the new one and validate before save is discussed before 
+
+
+//=======================get current user========================
+//p1--just get access the user from the request and give it in the response
+
+
+
+//=====================//Update (text based) Account details============
+ //p1
+    //it is advised to not update the text based and file based data together
+//p2 
+    //if the email and fullname both are not present then erro
+//p3 
+  // then query the database for the id of the user and update it directly since we already have got the user and its details
+//p4
+  //set is the mongodb operator that is used to directly change the old value to new value , agar isme bas new value bhi likh de to chalega, key value pair ki jarurat nhi h 
+//p5
+  //new:true ki help se jab bhi value update hogi to wo new value hame dikhegi
+    //-password karne se , jo password h wo respone me nhi aaega
+
+//========================Update Avatar============================
+// Step1
+    // get the path of the local file from the req
+
+// Step2
+    //  check agar local file path aya h ya nhi 
+    //   Nhi Aya hoga to error throw kar do 
+
+// Step3 
+    // jo local file path aya h usko wloudinary pe upload kar do ek function ki help se jo hamne utils me bana rakhi 
+    // Upload hone k baad ek object milega jisme bahut sari ingo hogi ab isme se url lena h
+
+// Step 4 
+    // agar link nhi aya to error bhej do 
+// Step 5
+    //  agar link aa gai h to use update kar do , (user id ko req se access karna h) just like we have done before
+    // Iske baad bas respond bhej do ki ha ho gaya kaam 

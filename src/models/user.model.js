@@ -54,6 +54,7 @@ const userSchema=new Schema({
 
 //using aggregate fnxs of mongoose
 //pre occures before something happens , in this case it occures before saving
+//this steps makes sure that the password is hashed before saving it to the database whenever user.save is called;
 userSchema.pre("save",async function(next){
     if(!this.isModified("password"))
         return 
@@ -63,6 +64,7 @@ userSchema.pre("save",async function(next){
 
 //checking the password is correct everyting it is submitted
 //bcrypt has inbuilt function to check the password entered ans the 'this.password'
+
 userSchema.methods.isPasswordCorrect= async function(password){
     return await bcrypt.compare(password,this.password); 
 }
@@ -71,7 +73,7 @@ userSchema.methods.isPasswordCorrect= async function(password){
 userSchema.methods.generateAccessTokens=async function () {
     return await jwt.sign({
         _id:this._id,
-        username:this.username,
+        username:this.username, 
         email:this.email,
         fullname:this.fullname
     },

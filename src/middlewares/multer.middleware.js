@@ -2,6 +2,7 @@
 
 
 //  THE WORK OF THIS FILE IS TO UPLOAD THE FILE ON THE SERVER AND SAVE IT WITH THE NAME AND RETURN THE LOCALFILENAME 
+
 import multer from "multer"
 
 //this code template is taken from github readme of multer

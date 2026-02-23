@@ -38,5 +38,41 @@ import fs from 'fs';
         }
     }
 
+const getPublicIdFromUrl=(url)=>
+{
+    try {
+        if(!url)
+            return null;
+        const subPartsOfUrl=url.split("/upload/");
+        if(subPartsOfUrl.length < 2) return null;
 
-export {uploadOnCloudinary};
+        let publiPartOfUrl=subPartsOfUrl[1];
+
+        // remove version
+        publiPartOfUrl = publiPartOfUrl.split("/").slice(1).join("/");
+
+        // remove extension
+        const publicId = publiPartOfUrl.split(".")[0];
+        return publicId;
+        
+    } catch (error) {
+        return null;
+    }
+}
+const deleteFromCLoudinary= async(imgUrl)=>{
+    try {
+        if(!imgUrl) return null;
+        
+        const publicId=getPublicIdFromUrl(imgUrl);
+        if(!publicId)
+            return null;
+        const result= await cloudinary.uploader.destroy(publicId);
+        return result;
+
+    } catch (error) {
+        console.log("Cloudinary Delete Error : ", error);
+        return null;
+    }
+}
+
+export {uploadOnCloudinary, deleteFromCLoudinary};

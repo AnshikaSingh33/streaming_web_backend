@@ -1,24 +1,28 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js ";
+import { uploadOnCloudinary ,deleteFromCLoudinary} from "../utils/cloudinary.js ";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { JsonWebTokenError } from "jsonwebtoken";
-//combine access of refresh and access tokens
-const generateAccessAndRefreshToken = async(userId)=>{
-  try{
-      const user= await User.findById(userId);
-      const accessToken = await user.generateAccessTokens();
-      const refreshToken = await user.generateRefreshTokens();
-      user.refreshToken=refreshToken; 
-      await user.save({ validateBeforeSave:false })
+import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 
-      return { accessToken , refreshToken };
+//combine access of refresh and access tokens
+const generateAccessAndRefreshToken = async (userId) => {
+  try {
+    const user = await User.findById(userId);
+    const accessToken = await user.generateAccessTokens();
+    const refreshToken = await user.generateRefreshTokens();
+    user.refreshToken = refreshToken;
+    await user.save({ validateBeforeSave: false });
+
+    return { accessToken, refreshToken };
+  } catch (error) {
+    throw new ApiError(
+      501,
+      "SOmething went wrong while generating Access and Refresh Token"
+    );
   }
-  catch(error){
-           throw new ApiError(501,"SOmething went wrong while generating Access and Refresh Token");
-  }
-}
+};
 
 //Register
 const registerUser = asyncHandler(async (req, res) => {
@@ -29,38 +33,29 @@ const registerUser = asyncHandler(async (req, res) => {
   )
     throw new ApiError(400, "Feild can't be empty  ");
 
-
-
-
   //check in db
   const existingUser = await User.findOne({ $or: [{ username }, { email }] });
   if (existingUser) throw new ApiError(409, "Username or email already exists");
 
-
-
-
   //files check point 3
-   
+
   const avatarLocalPath = req.files?.avatar[0]?.path;
 
   let coverimageLocalPath;
-  if(req.files&& Array.isArray(req.files.coverimage)&&req.files.coverimage.length>0)
-   coverimageLocalPath=req.files.coverimage[0].path;
+  if (
+    req.files &&
+    Array.isArray(req.files.coverimage) &&
+    req.files.coverimage.length > 0
+  )
+    coverimageLocalPath = req.files.coverimage[0].path;
 
   if (!avatarLocalPath) throw new ApiError(400, "Avatar file is required");
-
-
-
-
 
   //upload the files on cloudinary point 4
   const avatar = await uploadOnCloudinary(avatarLocalPath);
   const coverimage = await uploadOnCloudinary(coverimageLocalPath);
 
   if (!avatar) throw new ApiError(400, "Avatar file is required");
-
-
-
 
   //make an object and database me entry kar do point 5
 
@@ -88,245 +83,337 @@ const registerUser = asyncHandler(async (req, res) => {
 //login start, L1
 
 const loginUser = asyncHandler(async (req, res) => {
- const {email,username,password}= req.body;
-  if(!(username||password))
-    throw new ApiError(400,"Username or email is required");
+  const { email, username, password } = req.body;
+  if (!(username || password))
+    throw new ApiError(400, "Username or email is required");
 
-//L2 
-    const user=await  User.findOne({
-      $or:[{username},{email}]
-    })
-//l3
-    if(!user)
-      throw new ApiError(404,"User does not exist");
-//l4
-    const isPasswordValid = await user.isPasswordCorrect(password)
-    if(!isPasswordValid)
-      throw new ApiError(401,"Password incorrect");
+  //L2
+  const user = await User.findOne({
+    $or: [{ username }, { email }],
+  });
+  //l3
+  if (!user) throw new ApiError(404, "User does not exist");
+  //l4
+  const isPasswordValid = await user.isPasswordCorrect(password);
+  if (!isPasswordValid) throw new ApiError(401, "Password incorrect");
 
-//l5
-    const{accessToken,refreshToken}= await generateAccessAndRefreshToken(user._id);
+  //l5
+  const { accessToken, refreshToken } = await generateAccessAndRefreshToken(
+    user._id
+  );
 
-    const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
-    
-    const options={
-      httpOnly:true,
-      secure:true,
-    }
-//l6
-    return res.status(200).cookie("accessToken",accessToken,options).cookie("refreshToken",refreshToken,options).json(new ApiResponse(200,
-      {
-        user:loggedInUser,accessToken,refreshToken
-      }
-      ,"User Logged in successfully"
-    ))
-})
+  const loggedInUser = await User.findById(user._id).select(
+    "-password -refreshToken"
+  );
+
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+  //l6
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(
+      new ApiResponse(
+        200,
+        {
+          user: loggedInUser,
+          accessToken,
+          refreshToken,
+        },
+        "User Logged in successfully"
+      )
+    );
+});
 
 //LogOut --l01
-const logOut=asyncHandler(async(req,res)=>{
-  const updateToken=await User.findByIdAndUpdate(
+const logOut = asyncHandler(async (req, res) => {
+  const updateToken = await User.findByIdAndUpdate(
     req.user._id,
     {
-      $set:
-     { refreshToken:undefined}
-     },
-      {
-        new:true
-      }
-  )
-   console.log(updateToken);   
-   const options={
-      httpOnly:true,
-      secure:true,
-    } 
+      $set: { refreshToken: undefined },
+    },
+    {
+      new: true,
+    }
+  );
+  console.log(updateToken);
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
 
-    return res.status(200).clearCookie("accessToken",options).clearCookie("refreshToken",options).json(
-      new ApiResponse(200,{},"User logged out successfully")
-    )
- 
-})
+  return res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json(new ApiResponse(200, {}, "User logged out successfully"));
+});
 
-
-//controller for access point of access of Refresh token 
+//controller for access point of access of Refresh token
 //p1
-const refreshAccessToken= asyncHandler( async(req,res)=>
-  {
-   //p2
- const incomingRefreshToken= req.cookies.refreshToken||req.body.refreshToken;
-  if(!incomingRefreshToken)
- {
-  throw new ApiError(401, "Unauthorised Request");
- }
-
-     try {
-     //p2
-       const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET)
-       //p3
-     const user= await User.findById(decodedToken?._id) 
-     if(!user)
-     {
-       throw new ApiError(401,"Invalid RefreshToken"); 
-     }
- //p4
-     if(incomingRefreshToken!==user.refreshToken)
-     {
-       throw new ApiError(401,"Refresh Token expired or used");
-     }
- 
-     const options={
-       httpOnly:true,
-       secure:true
-     }
- 
-     const  {accessToken, newRefreshToken} = await generateAccessAndRefreshToken(user._id);
- 
-     return res
-     .status(200)
-     .cookies("accessToken",accessToken,options)
-     .cookies("refreshToken",newRefreshToken,options)
-     .json(new ApiResponse(200,{accessToken,refreshToken:newRefreshToken},"Access Token refreshed succefully")); 
- 
-     } catch (error) {
-        throw new ApiError(401,"Something wrong with decoding"); 
-     }
-})
-
-
-//Changing password to new password
-const changeCurrentPassword = asyncHandler(async()=>{
-
-  //p1
-      const {oldPassword, newPassword} = req.body
-
-      const user= await User.findById(user?._id);
-
+const refreshAccessToken = asyncHandler(async (req, res) => {
   //p2
-     const passwordCheck =await user.isPasswordCorrect(oldPassword);
-     if(!passwordCheck)
-     {
-         throw new ApiError(401,"Invalid old Password"); 
-     }
-
-  //p3 
-    else
-     {
-      user.password=newPassword;
-      user.save({validateBeforeSave:false })
-
-      return res.status(200).json(new ApiError(200,{},"Password saved successfully"))
-     }
-
-})
-
-//get current user
-const getCurrentUser= asyncHandler(async(req,res)=>{
-//p1
-  return res.status(200).json(new ApiResponse(200, req.user, "User sent successfully" ));
-})
-
-
-//Update (text based) Account details
-const updateAccountDetails= asyncHandler(async(req,res)=>{ 
-
-  //p1
-  const {email,fullname} = req.body;
-
-//p2 
-  if(!email || !fullname)
-  {
-    throw new ApiError(401, "Email and fullname are required");
+  const incomingRefreshToken =
+    req.cookies.refreshToken || req.body.refreshToken;
+  if (!incomingRefreshToken) {
+    throw new ApiError(401, "Unauthorised Request");
   }
-  
-  //p3 
-   const user=User.findByIdAndUpdate(req.user?._id,
-    {
-      //p4
-      //set is the mongodb operator that is used to directly change the old value to new value , agar isme bas new value bhi likh de to chalega, key value pair ki jarurat nhi h 
 
-        $set:{
-          fullname:fullname,
-          email:email
-        }
+  try {
+    //p2
+    const decodedToken = jwt.verify(
+      incomingRefreshToken,
+      process.env.REFRESH_TOKEN_SECRET
+    );
+    //p3
+    const user = await User.findById(decodedToken?._id);
+    if (!user) {
+      throw new ApiError(401, "Invalid RefreshToken");
     }
-    //p5
-   
-    ,{
-      new:true
+    //p4
+    if (incomingRefreshToken !== user.refreshToken) {
+      throw new ApiError(401, "Refresh Token expired or used");
     }
-   ).select("-password");
-     return res.status(200).json(new ApiResponse(200,"User DetailsUpdated Successfully"));
-})
 
-
-//update user avatar
-const updateUserAvatar= asyncHandler(async(req,res)=>{
-  //s1
-    const avatarLocalPath=req.file?.path;
-//s2
-     if(!avatarLocalPath)
-     {
-      throw new ApiError(401,"Avatar local file path is missing");
-     }
-//s3
-    const avatar = await  uploadOnCloudinary(avatarLocalPath);
-//s4
-    if(!avatar.url)
-    {
-      throw new ApiError(401,"Error while uploading the Avatar");
-    }
-//s5 
-    const user = await User.findByIdAndUpdate(req.user?._id,{
-        $set:{
-            avatar : avatar.url
-        }
-    },{new:true}).select("-password");
-
-    return res.status(200).json(new ApiResponse(200,user,"Avatar updated successfully"));
-})
-
-//update cover image same is we did for avatar
-const updateUserCoverImage=asyncHandler(async(req,res)=>{
-   const coverimageLocalPath=req.file?.path;
-   if(!coverimageLocalPath)
-   {
-    throw new ApiError(401, "coverImage local path is not found");
-   }
-   
-   const coverimage=await uploadOnCloudinary(coverimageLocalPath);
-
-   if(!coverimage.url)
-   {
-    throw new ApiError(401,"Faild to get url after uploading on cloudinary");
-   }
-
-   const user = User.findByIdAndUpdate(req.user._id,{
-    $set:{
-      coverimage:coverimage.url
-    }
-   },
-   {new:true})
-   .select("-passwprd");
-
-   return res.status(200).json(new ApiResponse(200,user,"CoverImage updated succefully"));
-})
-
-
-
-export { registerUser ,
-        loginUser ,
-        logOut , 
-        refreshAccessToken, 
-        updateAccountDetails, 
-        updateUserAvatar, 
-        getCurrentUser,
-        changeCurrentPassword,
-        updateUserCoverImage
+    const options = {
+      httpOnly: true,
+      secure: true,
     };
 
+    const { accessToken, newRefreshToken } =
+      await generateAccessAndRefreshToken(user._id);
+
+    return res
+      .status(200)
+      .cookies("accessToken", accessToken, options)
+      .cookies("refreshToken", newRefreshToken, options)
+      .json(
+        new ApiResponse(
+          200,
+          { accessToken, refreshToken: newRefreshToken },
+          "Access Token refreshed succefully"
+        )
+      );
+  } catch (error) {
+    throw new ApiError(401, "Something wrong with decoding");
+  }
+});
+
+//Changing password to new password
+const changeCurrentPassword = asyncHandler(async (req,res) => {
+  //p1
+  const { oldPassword, newPassword } = req.body;
+
+  const user = await User.findById(user?._id);
+
+  //p2
+  const passwordCheck = await user.isPasswordCorrect(oldPassword);
+  if (!passwordCheck) {
+    throw new ApiError(401, "Invalid old Password");
+  }
+
+  //p3
+  else {
+    user.password = newPassword;
+    user.save({ validateBeforeSave: false });
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, {}, "Password saved successfully"));
+  }
+});
+
+//get current user
+const getCurrentUser = asyncHandler(async (req, res) => {
+  //p1
+  return res
+    .status(200)
+    .json(new ApiResponse(200, req.user, "User sent successfully"));
+});
+
+//Update (text based) Account details
+const updateAccountDetails = asyncHandler(async (req, res) => {
+  //p1
+  const { email, fullname } = req.body;
+
+  //p2
+  if (!email || !fullname) {
+    throw new ApiError(401, "Email and fullname are required");
+  }
+
+  //p3
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      //p4
+      //set is the mongodb operator that is used to directly change the old value to new value , agar isme bas new value bhi likh de to chalega, key value pair ki jarurat nhi h
+
+      $set: {
+        fullname: fullname,
+        email: email,
+      },
+    },
+    //p5
+
+    {
+      new: true,
+    }
+  ).select("-password");
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "User DetailsUpdated Successfully"));
+});
+
+//update user avatar
+const updateUserAvatar = asyncHandler(async (req, res) => {
+  //s1
+  const avatarLocalPath = req.file?.path;
+  //s2
+  if (!avatarLocalPath) {
+    throw new ApiError(401, "Avatar local file path is missing");
+  }
+  //s3
+  const avatar = await uploadOnCloudinary(avatarLocalPath);
+  //s4
+  if (!avatar.url) {
+    throw new ApiError(401, "Error while uploading the Avatar");
+  }
+  //s4.1 I'm making as user so that I can get the url of old avatar before updating it to the new one, so I can delete it
+  const user = await User.findById(req.user._id);
+  const oldAvatarUrl = user?.avatar;
+  //s5
+  const updatedUser = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set: {
+        avatar: avatar.url,
+      },
+    },
+    { new: true }
+  ).select("-password");
+
+  if (!updatedUser || updatedUser.avatar !== avatar.url) {
+    throw new ApiError(500, "Failed to update avatar");
+  }
+
+  //s6
+  //I need to first make sure that it has been updated ,
+  //then get the url of the old
+  //call the util function that deletes the old image from cloudinary
+   const deleteOldAvatar= await deleteFromCLoudinary(oldAvatarUrl);
+    console.log(deleteOldAvatar);
+  return res
+    .status(200)
+    .json(new ApiResponse(200, updatedUser, "Avatar updated successfully"));
+});
+
+//update cover image same is we did for avatar
+const updateUserCoverImage = asyncHandler(async (req, res) => {
+  const coverimageLocalPath = req.file?.path;
+  if (!coverimageLocalPath) {
+    throw new ApiError(401, "coverImage local path is not found");
+  }
+
+  const coverimage = await uploadOnCloudinary(coverimageLocalPath);
+
+  if (!coverimage.url) {
+    throw new ApiError(401, "Faild to get url after uploading on cloudinary");
+  }
+
+  const user = User.findByIdAndUpdate(
+    req.user._id,
+    {
+      $set: {
+        coverimage: coverimage.url,
+      },
+    },
+    { new: true }
+  ).select("-passwprd");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "CoverImage updated succefully"));
+});
 
 
+//Using aggregation pipeline for getwatchhistory
+const getWatchHistory= asyncHandler( async(req,res)=>
+{
+  //when we do req.user._id it returns the id inside the mongodb as a string and we do User.finduserbyId the mongoose handels this situation and converts the string to desired type
 
 
+   const user= await User.aggregate([
+    {
+      // $match is used to matcht the desired feild in the collection , more like find based on certain condition , eg filter all the studets above 40 marks
+      //we make a new obj of MOngoose inorder to deal with the obj given by the req.user._id
+        $match:{
+          _id: new mongoose.Types.ObjectId(req.user._id)
+          //by doind this we have reached to the user , jisko watchhistory nikalni h 
+        },
+      //$lookup is used to get the left join of User to the videos("from" feild of lookup), 
+      //localfeild ka mtlb User k andr konsi wali feild h jisko match karna h left join karte time
+      //feoreignfeild ka mtlb video k andr wo watchhistory wale ka kya name h , for eg: agar koi person school me h aur colony me bhi h to colony collection k persion_id ko school wale std_id wale se lookup karenge
+       // as ka mtlb h jo outer join k baad jo naya collection banega usme is new wali feild ka name kya hoga , jo is case me "watchHistory" hoga,
+        $lookup:{
+          from:"Videos",
+          localFeild: "watchHistory",
+          foreignFeild: "_id",
+          as: "watchHistory",
+           //yaha tk hame wo video mil gai h jo hamne dekhi h , but ab isme bhi to owner hoga jisne video banai h , ab usko bhi access karna h, uske liye ab new pipeline banaenge
+          pipeline:[
+            {
+              $lookup:{
+                from:"Users",
+                localField:"owner",
+                foreignFeild: "_id",
+                as:"owner",
+                //ab yaha tk ham vdo k creater tk bhi pahuch gae, ab uske sare details to chahihye nhi to jo detaild chahiye uske line new pipeline banaenge jisme required feilds ko project karenge
+                pipeline:[
+                  {
+                    //ye wale project ka bhi same wahi kaam h jo babli maam ne batya tha , required feilds ko show karne k liye
+                    $project:{
+                      fullname:1,
+                      username:1,
+                      avatar:1
+                    }
+                  }
+                ]
+              }
+            },
+
+            //ab dekho yaha tk owner aa jaega ek array ki form me ,but hame bas first element chahiye uske=a jisme projected values h , taki fronted me dikkat na ho so , yaha pe hi 1st element ko le lenge
+            {
+              $addFields:{
+                owner:{
+                  $first:"$owner"
+                  //feild me se nikalne k liye $owner likha h
+                }
+                //ye sb karne se ek obj mil jaega named owner jisko '.' karne usme se values nukal skte h
+              }
+            }
+          ]
+        }
+    }
+  ])
+   return res.status(200).json(new ApiResponse(200,user[0].watchHistory, "Watch history fetched successfully"));
+})
+
+
+export {
+  registerUser,
+  loginUser,
+  logOut,
+  refreshAccessToken,
+  updateAccountDetails,
+  updateUserAvatar,
+  getCurrentUser,
+  changeCurrentPassword,
+  updateUserCoverImage,
+  getWatchHistory
+};
 
 //=================POINT 1======================/
 
@@ -359,13 +446,12 @@ export { registerUser ,
 
 //$ sign allows us to use the logical operators like and, or, nor, xor, etc.
 
-
 //=================POINT 4======================/
 //local path is returned , as the files is not yet upluaded to the cloudinary
 //in this we are using the output from multer middleware
 //the path is at the index 0 of the info returned
 //checking is required only for avatar and not cover image
-//const coverimageLocalPath = req.files?.coverimage[0]?.path;-->was giving because we are not checking it and hence it gives the error as cant access undefined 
+//const coverimageLocalPath = req.files?.coverimage[0]?.path;-->was giving because we are not checking it and hence it gives the error as cant access undefined
 
 //=================POINT 5======================/
 
@@ -378,81 +464,74 @@ export { registerUser ,
 
 //select -password and -refreshtokens is done to remove pass and re..n fron the output to the user
 
-
 //================= LOGIN (L1)======================/
 // 1. take the input from user
 // 2. validate the inputs (not empty)
 // 3. match the input with the database and give the response based on that.
 // 4. if password not match then error
-// 5. if password match we create the access token and the 
+// 5. if password match we create the access token and the
 // refresh token.
-// 6. send tokens as cookie  
+// 6. send tokens as cookie
 
 //======================(L5)======================/
 //this option lets someone edit the cookies on the server side only
 
-
 //======================(Refresh and Access Token)======================/
 
 //  INTRO = we are doing this so that we can create an endpoint where the user can
-//    generate a new refresh token when the access token has expired without needing a     new login 
+//    generate a new refresh token when the access token has expired without needing a     new login
 //p1
-    //the incoming token can come from cookies saved in the backend or the body
+//the incoming token can come from cookies saved in the backend or the body
 //p2
-      //the refreshtoken that we have is encrypted due to safety reasons and is not same as the one we have in database
-      //so we use verify function along with the secret key to get the decoded token
+//the refreshtoken that we have is encrypted due to safety reasons and is not same as the one we have in database
+//so we use verify function along with the secret key to get the decoded token
 //p3
-       //then we search the databse for the user info by the helf of the decodedtoken as it has the id 
+//then we search the databse for the user info by the helf of the decodedtoken as it has the id
 //p4
-      //then we match the decoded refresh token with the refreshtoken in the database, if is exists then generate the access and refresh tokens based on the id of the user 
-      //then send the responses 
-
-
+//then we match the decoded refresh token with the refreshtoken in the database, if is exists then generate the access and refresh tokens based on the id of the user
+//then send the responses
 
 //===========Changing password to new password=================//
 
 //p1
-  //we need new as well as the old password to change the pass
-  //we can also implement tha functionality of new password and confirm password by if(newPassword===confirmPassword)
+//we need new as well as the old password to change the pass
+//we can also implement tha functionality of new password and confirm password by if(newPassword===confirmPassword)
 
 //p2
-  //ispassword function checks if the old password entered is correct or rong
-//p3 
-  // since there is only one feild we can directly change the value to the new one and validate before save is discussed before 
-
+//ispassword function checks if the old password entered is correct or rong
+//p3
+// since there is only one feild we can directly change the value to the new one and validate before save is discussed before
 
 //=======================get current user========================
 //p1--just get access the user from the request and give it in the response
 
-
-
 //=====================//Update (text based) Account details============
- //p1
-    //it is advised to not update the text based and file based data together
-//p2 
-    //if the email and fullname both are not present then erro
-//p3 
-  // then query the database for the id of the user and update it directly since we already have got the user and its details
+//p1
+//it is advised to not update the text based and file based data together
+//p2
+//if the email and fullname both are not present then erro
+//p3
+// then query the database for the id of the user and update it directly since we already have got the user and its details
 //p4
-  //set is the mongodb operator that is used to directly change the old value to new value , agar isme bas new value bhi likh de to chalega, key value pair ki jarurat nhi h 
+//set is the mongodb operator that is used to directly change the old value to new value , agar isme bas new value bhi likh de to chalega, key value pair ki jarurat nhi h
 //p5
-  //new:true ki help se jab bhi value update hogi to wo new value hame dikhegi
-    //-password karne se , jo password h wo respone me nhi aaega
+//new:true ki help se jab bhi value update hogi to wo new value hame dikhegi
+//-password karne se , jo password h wo respone me nhi aaega
 
 //========================Update Avatar============================
 // Step1
-    // get the path of the local file from the req
+// get the path of the local file from the req
 
 // Step2
-    //  check agar local file path aya h ya nhi 
-    //   Nhi Aya hoga to error throw kar do 
+//  check agar local file path aya h ya nhi
+//   Nhi Aya hoga to error throw kar do
 
-// Step3 
-    // jo local file path aya h usko wloudinary pe upload kar do ek function ki help se jo hamne utils me bana rakhi 
-    // Upload hone k baad ek object milega jisme bahut sari ingo hogi ab isme se url lena h
+// Step3
+// jo local file path aya h usko wloudinary pe upload kar do ek function ki help se jo hamne utils me bana rakhi
+// Upload hone k baad ek object milega jisme bahut sari ingo hogi ab isme se url lena h
 
-// Step 4 
-    // agar link nhi aya to error bhej do 
+// Step 4
+// agar link nhi aya to error bhej do
 // Step 5
-    //  agar link aa gai h to use update kar do , (user id ko req se access karna h) just like we have done before
-    // Iske baad bas respond bhej do ki ha ho gaya kaam 
+//  agar link aa gai h to use update kar do , (user id ko req se access karna h) just like we have done before
+// Iske baad bas respond bhej do ki ha ho gaya kaam

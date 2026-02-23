@@ -338,8 +338,11 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, user, "CoverImage updated succefully"));
 });
 
+const getUserChannelProfile=asyncHandler(async(req,res)={
+  
+})
 
-//Using aggregation pipeline for getwatchhistory
+//Using aggregation pipeline for getwatchHistory(all the threory and details are written in this segment itself not below)
 const getWatchHistory= asyncHandler( async(req,res)=>
 {
   //when we do req.user._id it returns the id inside the mongodb as a string and we do User.finduserbyId the mongoose handels this situation and converts the string to desired type
@@ -412,7 +415,8 @@ export {
   getCurrentUser,
   changeCurrentPassword,
   updateUserCoverImage,
-  getWatchHistory
+  getUserChannelProfile,
+  getWatchHistory,
 };
 
 //=================POINT 1======================/
